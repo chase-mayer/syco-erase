@@ -1,0 +1,10 @@
+torch>=2.4
+transformers>=4.44
+accelerate>=0.33
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.5
+matplotlib>=3.9
+tqdm>=4.66
+# optional: closed-form linear concept erasure (LEACE)
+concept-erasure>=0.2.4

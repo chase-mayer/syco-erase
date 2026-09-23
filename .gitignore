@@ -1,0 +1,9 @@
+data/raw/
+data/processed/
+outputs/
+*.pt
+*.npz
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+.env
