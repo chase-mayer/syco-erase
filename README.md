@@ -73,16 +73,42 @@ perplexity), never at a single steering strength, and reported with per-item var
 `google/gemma-2-2b-it` (fits a 16 GB GPU in bf16) and `Qwen/Qwen2.5-7B-Instruct`
 (A100 on Colab, or 4-bit locally). Intervention is inference-only — no training.
 
+## Quickstart
+
+```bash
+git clone https://github.com/chase-mayer/syco-erase.git && cd syco-erase
+pip install -r requirements.txt
+bash scripts/download_data.sh          # ~66 MB, git-ignored
+python -m src.data --dataset all       # 30,051 opinion/neutral pairs
+python -m tests.test_mechanics         # 6 tests, no model download needed
+python -m src.run_experiment --model Qwen/Qwen2.5-1.5B-Instruct --n 400
+```
+
+On Colab, open [`notebooks/bes_colab.ipynb`](notebooks/bes_colab.ipynb) — it does all of the
+above plus the layer sweep, the novelty check, the BES/CAA Pareto sweep and the plot.
+
 ## Layout
 
 ```
-docs/proposal.md      proposal + why this is a new algorithm
-scripts/              data download
-src/data.py           opinion/neutral pair construction
-src/hooks.py          activation capture, AddVector / ProjectOut / PatchFrom
-src/directions.py     behaviour vector, stance subspace, LEACE, novelty check
-src/evaluate.py       A/B scoring, sycophancy rate, KL, invariance gap
+docs/proposal.md            proposal + why this is a new algorithm
+notebooks/bes_colab.ipynb   end-to-end Colab runner
+scripts/download_data.sh    data download
+src/data.py                 opinion/neutral pair construction
+src/bes.py                  interventions, activation capture, subspace fit, A/B metrics
+src/run_experiment.py       CLI: fit -> novelty check -> sweep -> results/*.json
+tests/test_mechanics.py     hook/mask/projection/metric tests (no GPU, no download)
 ```
+
+## Implementation notes
+
+- **Suffix alignment.** The opinion and neutral prompts share an identical question suffix,
+  so position-aligned activation differences over that suffix isolate the contextual
+  influence of the stated stance. That difference matrix is what the subspace is fit on.
+- **Left padding everywhere**, so the final prompt token is always at position −1.
+- **A/B readout** appends `" ("` to the prompt, making the next token `A` or `B`; comparing
+  full `" (A)"` strings would compare identical `" ("` prefixes.
+- **Intervention masking** is per-item: the projection applies only over the shared question
+  span, not over padding.
 
 ## Key references
 
