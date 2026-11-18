@@ -1,0 +1,5 @@
+method,mmlu_acc,p_vs_original
+none,0.595,3.77800224012375e-05
+BES original (svd k2 s0.75),0.526,
+svd_shift_weighted k2 s1,0.561,0.01735109046314741
+"greedy [1, 0] s0.75",0.526,1.0

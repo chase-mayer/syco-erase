@@ -1,0 +1,15 @@
+data/processed/
+data/raw/caa_ref/
+data/raw/mmlu_sample.jsonl
+data/raw/sycophancy_eval/feedback.jsonl
+outputs/
+*.pt
+*.npz
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+.env
+report/
+data/rimsky_caa/normalized_vectors/
+data/rimsky_caa/vectors/
+data/rimsky_caa/results/

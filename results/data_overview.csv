@@ -1,0 +1,4 @@
+dataset,items,questions,mean_options,max_options,share_more_than_2,share_match_A
+nlp,9984,32,2.0,2,0.0,0.5
+phil,9867,109,3.1471571906354514,7,0.5919732441471572,0.36454849498327757
+political,10200,17,2.0,2,0.0,0.5

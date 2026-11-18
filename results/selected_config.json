@@ -1,0 +1,35 @@
+{
+  "bes": {
+    "layer": 12,
+    "rank": 2,
+    "estimator": "svd",
+    "span": "question",
+    "window": 16,
+    "band": 1,
+    "strength": 0.75,
+    "val_syco": 0.5207046270370483,
+    "val_kl": 0.06750433892011642,
+    "val_syco_neutral": 0.4875091016292572,
+    "val_syco_opinion": 0.7160464525222778,
+    "val_kl_opinion": 0.33186373114585876
+  },
+  "caa": {
+    "layer": 18,
+    "span": "all",
+    "fit_size": 999,
+    "alpha_grid": [
+      -0.5,
+      -1.0,
+      -2.0,
+      -4.0,
+      -8.0,
+      -16.0
+    ],
+    "alpha_matched": -13.015368097975866,
+    "reached_target": true,
+    "target_syco": 0.5207046270370483,
+    "val_kl_at_target": 0.23986145230821612,
+    "vec_norm": 4.768314361572266,
+    "residual_norm": 70.07662200927734
+  }
+}

@@ -1,0 +1,353 @@
+# Belief-Erasure Steering (BES)
+
+Removing the user's stated stance from the residual stream to mitigate sycophancy.
+DATASCI 266 (NLP with Deep Learning), UC Berkeley MIDS — solo final project, Chase Mayer.
+
+## Idea
+
+Language models shift their answers toward opinions users state about themselves.
+Contrastive Activation Addition (CAA; Rimsky et al., 2024) counters this by *adding* an
+anti-sycophancy behaviour vector to the residual stream. BES instead *removes* the model's
+representation of what the user said they believe. Each benchmark item gives a pair of prompts
+that share the same question: with the user's biography (opinion prompt) and without it
+(neutral prompt). BES fits a direction to the position-aligned opinion-minus-neutral activation
+differences (top-k right singular vectors U of the centred differences) and projects them out
+at inference over the question tokens:
+
+    h ← h − s · UᵀU h,   s ∈ [0, 1]
+
+Because the neutral prompt exists for every item, success has a reference point: the
+intervened model should answer as it does when no opinion is stated. The main metric is
+KL(no-opinion ‖ intervened) alongside the probability of the user's preferred answer.
+
+## Results in brief
+
+### Qwen2.5-1.5B-Instruct, held-out questions, 3 seeds
+
+| | Sycophancy | KL to no-opinion | MMLU | Acc. when user is wrong |
+|---|---|---|---|---|
+| No intervention | 0.709 | 0.364 | 0.595 | 0.128 |
+| "Ignore my opinion" prompt | 0.742 | 0.527 | 0.588 | 0.170 |
+| BES (selected: layers 11–13, rank 2, s = 0.75) | 0.510 | 0.150 | 0.526 | 0.406 |
+| CAA matched to BES (layer 18, α = −13.0) | 0.519 | 0.288 | 0.370 | 0.330 |
+| CAA at its best KL (α = −4) | 0.553 | 0.160 | 0.572 | 0.146 |
+| Oracle (no-opinion prompt) | 0.470 | 0 | — | 0.628 |
+
+- At matched sycophancy BES has lower KL than CAA in all three seeds (significant in two) and
+  loses 6.9 MMLU points against CAA's 22.5. At mild reductions CAA is as good on KL and cheaper.
+- The erased direction does **not** encode which answer the user favours (AUC ≈ 0.5) and works
+  at layer 12, before that information is linearly readable; it removes the biography's imprint
+  on the question tokens, not a stance axis.
+- BES transfers to a factual control (user-wrong accuracy 0.13 → 0.41) but not to "are you
+  sure?" pushback, where every method increases answer flipping.
+- The CAA implementation reproduces Rimsky et al.'s published Llama-2-7B-Chat numbers within
+  0.0013 (notebook 06, official Meta weights).
+- **The result does not transfer to the public benchmark.** Run under Rimsky et al.'s own
+  protocol on Llama-2-7B-Chat (their fitting items, test items, released vectors and metric;
+  notebook 07), BES leaves sycophancy unchanged at every layer tried (0.695 → 0.711 on their
+  50 items; 0.782 → 0.725 on 400 held-out PhilPapers items), while their layer-13 vector at
+  α = −1 reaches 0.539 (published 0.538) and 0.525, and layer 12 reaches 0.466 (published
+  0.465).
+- **Why, and the fix (notebooks 08–09).** Activation patching shows the biography's influence
+  runs through the question tokens and reaches the answer position between layers 12 and 16, as
+  BES assumes, and that erasing it there would remove it entirely (0.43 vs no-opinion 0.43). The
+  rank was the problem: on Llama-2 the imprint is spread over many directions (rank 2 / 4 / 8 / 16
+  at layer 12: 0.726 / 0.674 / 0.572 / 0.515 on validation). With clean selection on half the
+  PhilPapers questions and testing on the other half, rank-16 SVD reaches official CAA (0.524 vs
+  0.504, KL 0.50 vs 0.51, MMLU −3.9 vs −3.2 points) and four directions learned on the KL
+  objective (model frozen, 450 steps) reach the no-opinion level (0.441; oracle 0.427) with CAA's
+  KL at matched sycophancy (0.395 vs 0.440, n.s.) and no measurable MMLU cost (−0.7 points vs
+  −6 to −8 for matched CAA). Notebook 08's five effect-selected directions did not replicate on the
+  clean split (0.604). On Qwen, none of the alternatives beats the original setting.
+
+The written report was submitted separately through the course and is not part of this repo;
+references to "the report" below point to it.
+
+## Notebooks
+
+The notebooks in `notebooks/` are the executed runs, with their outputs. Each code cell opens with a one-line
+comment saying what it does; each section has a one-sentence summary. This section explains
+what each notebook is for, how to read its output, what it found, and why the next one exists.
+
+| # | Notebook | Model | Data | Writes to `results/` |
+|---|---|---|---|---|
+| 01 | `01_data_and_diagnostics` | Qwen | fit + validation | `data_overview`, `baseline_by_dataset`, `layer_diagnostics`, `novelty_check`, `fig_diagnostics` |
+| 02 | `02_bes_ablations` | Qwen | validation | `ablation_*`, `fig_ablations`, `selected_config.json["bes"]` |
+| 03 | `03_caa_steelman` | Qwen | validation | `caa_grid`, `caa_fit_size`, `caa_matched`, `prompt_baseline_val`, `fig_caa_steelman_val`, `selected_config.json["caa"]` |
+| 04 | `04_main_results` | Qwen | **test**, 3 seeds | `test_*`, `table1_frontier`, `table2_control_capability`, `fig1_frontier`, `fig2_control_capability` |
+| 05 | `05_transfer_pushback` | Qwen | pushback items | `test_pushback`, `fig3_pushback` |
+| 06 | `06_caa_reproduction_llama2` | Llama-2-7B-Chat | Rimsky et al. release | `caa_reproduction_llama2` |
+| 07 | `07_bes_llama2_vs_published_caa` | Llama-2-7B-Chat | Rimsky et al. release + PhilPapers | `llama_*` (no suffix), `fig_llama_frontier` |
+| 08 | `08_bes_llama2_improvements` | Llama-2, then Qwen | as 07; Qwen seed 0 | `llama_imp_*`, `qwen_imp_*`, `fig_llama_diagnostics`, `fig_llama_improved`, `fig_qwen_improved` |
+| 09 | `09_bes_llama2_closing_the_gap` | Llama-2, then Qwen | PhilPapers split by question; Qwen seed 0 | `llama_gap_*`, `qwen_gap_*`, `fig_llama_gap` |
+
+**Terms used below.** *Sycophancy* (or `syco`, P) is the mean probability the model gives to the
+user's preferred option; lower is better, down to the *oracle* level, which is the same quantity
+on the neutral prompt. *KL* is KL(no-opinion ‖ intervened) over the item's options: 0 means the
+method restored the no-opinion answers exactly. *s* is BES strength (fraction of each direction
+removed), *α* is the CAA multiplier (negative pushes away from sycophancy), *rank* is the number
+of directions removed, *span* is which tokens are edited. The *matched point* is the CAA
+multiplier that gives the same sycophancy as the selected BES setting. Intervals are 95%
+question-clustered bootstrap; MMLU differences use exact McNemar tests.
+
+### 01 — Data and diagnostics
+
+**Purpose.** Establish what the benchmark contains and what the BES direction encodes, before
+any steering result is trusted.
+
+**How to read it.** §1 counts items, distinct questions and option positions per subset. §2
+builds the question-grouped splits. §3 is the size of the effect to be removed: P(user's
+answer) with and without the biography. §4 asks whether the top BES direction carries the
+user's stance: an AUC near 0.5 means it does not; the probe columns say at which layer the
+user's option becomes linearly readable, and whether removing the direction changes that. §5
+compares the BES directions with the CAA vector; |cos| near 1 would make BES a re-derivation of
+CAA.
+
+**Findings.** 30,051 items but only 158 distinct questions; 59% of PhilPapers items have more
+than two options and 27% put the user's answer at (C)–(G). On validation the biography raises
+P(user's answer) from 0.488 to 0.716 (+0.229, CI 0.160–0.319): +0.379 PhilPapers, +0.235 NLP,
++0.071 political (CI includes zero). The direction does not separate users favouring (A) from
+(B) at any layer (AUC 0.47–0.55); the probe is at chance through layer 12 and reaches 0.84 by
+layer 18; |cos| with CAA ≤ 0.23.
+
+**What it led to.** The few-questions finding changed the whole pipeline to question-grouped
+splits and multi-option scoring. The AUC result is why the report describes BES as removing
+the biography's imprint on the question rather than a stance axis.
+
+### 02 — BES ablations
+
+**Purpose.** Choose every BES setting on validation questions only, by the objective BES is
+built for: KL to the no-opinion answers.
+
+**How to read it.** Sections A–G vary one setting at a time, each starting from the winner of
+the previous one: layer, rank, estimator, span, fitting window, band of neighbouring layers,
+strength. Each printed line gives sycophancy and KL for that setting; the dashed line in the
+figure is no intervention (KL 0.332). The final cell writes the chosen setting to
+`selected_config.json`.
+
+**Findings.** Layer 12 (KL 0.187), rank 2 (0.091), centred SVD over mean difference (0.312)
+and LEACE (0.271), question span (0.091; last token 0.297, biography 0.244), window 16, band ±1
+(0.075), strength 0.75 (KL 0.068, sycophancy 0.521).
+
+**What it led to.** This configuration is used unchanged in 03–05.
+
+### 03 — CAA steel man and the prompting baseline
+
+**Purpose.** Make sure the comparison method is at full strength.
+Earlier runs disadvantaged CAA (150 fitting items, unit-normalised, wrong readout position, BES's
+layer); here it follows Rimsky et al.'s recipe and gets its own search.
+
+**How to read it.** §A is the full grid of layer × multiplier × span on validation, and the
+selection of the setting with the lowest KL at BES's sycophancy level, plus the multiplier that
+reaches it. §B checks whether fitting on 999 rather than 300 items matters. §C is the
+"ignore my opinion" instruction.
+
+**Findings.** Only 2 of 21 layer–span settings reach BES's sycophancy level, both at layer 18;
+the selected one (all tokens) has its best KL at α = −4 (sycophancy 0.562, KL 0.157) and matches
+BES at α = −13.0 (KL 0.240). Fit size changes little. The prompt raises sycophancy.
+
+**What it led to.** The matched multiplier is written to `selected_config.json` for 04–05.
+
+### 04 — Main results on held-out test questions
+
+**Purpose.** The headline comparison: the validation-selected settings applied once to test
+questions, for three seeds that each redraw the splits and refit every direction.
+
+**How to read it.** §1–2: the frontier table (sycophancy and KL for every method and strength)
+and paired differences at the matched point. Seed 0's test questions are fully disjoint from
+selection; seeds 1–2 reuse seed-0 settings, so they show variability rather than independent
+confirmation. §3 breaks seed 0 down by subset and by item. §4 is the factual control: a good
+method should raise accuracy when the user endorses a wrong answer without lowering it when
+the user is right. §5 is MMLU with each method applied.
+
+**Findings.** Both methods cut sycophancy by about 0.20. At the matched point BES has lower KL
+in all three seeds (−0.066, p = 0.35 on seed 0; −0.121 and −0.225, p ≤ 0.002 on seeds 1–2), and
+loses 6.9 MMLU points to CAA's 22.5; at α = −4 CAA loses only 2.3. BES lifts accuracy under a
+wrong user opinion from 0.128 to 0.406; CAA does not. BES raises KL on political items (0.146 →
+0.393), driven by 165 items where the biography had *lowered* agreement.
+
+**What it led to.** The report's main Qwen result (Tables 1–2, Figures 1–2).
+
+### 05 — Transfer to conversational pushback
+
+**Purpose.** Test whether directions fitted on stated opinions also help when the user objects
+to the model's answer ("are you sure?").
+
+**How to read it.** `flip_from_correct` is the harm (a right answer abandoned);
+`flip_to_correct` is a legitimate correction. A method that raises both is adding instability
+rather than reducing deference.
+
+**Findings.** Nothing transfers: abandoning a correct answer rises from 0.265 with no
+intervention to 0.440 (BES) and 0.443 (matched CAA), and corrections rise too.
+
+**What it led to.** Reported as a limitation: pushback is a different mechanism.
+
+### 06 — CAA implementation checked against Rimsky et al. (2024)
+
+**Purpose.** Benchmark the comparison method against published results.
+Their released Llama-2-7B-Chat vectors, data and per-item results are run through this repo's
+hook and scoring code.
+
+**How to read it.** Check 1 puts their vector through our code; check 2 extracts our own vector
+from their data. `abs_diff` against their published probabilities should be about 0.01 or less,
+and the cosine between vectors near 1.
+
+**Findings.** Agreement within 0.0013 at every multiplier; cosine 1.0000.
+
+**What it led to.** The Qwen CAA baseline uses a verified implementation. But 06 checks CAA's
+code, not BES against a published number, which is what 07 adds.
+
+### 07 — BES on Llama-2-7B-Chat against published CAA
+
+**Purpose.** Put BES on the exact setup Rimsky et al. used (model, chat prompt, their 1,000
+fitting items, their 50 test items, their metric, their released vectors for every layer, their
+570-item MMLU set) so it can be read directly against published numbers.
+
+**How to read it.** In the test table, `published_raw` / `published_norm` are their numbers for
+the same items; for `none` and the CAA rows they should match ours to about 0.002, which confirms
+the protocol. Their test questions all appear in their fitting set, so the 400 PhilPapers items
+(questions neither method was fitted on) are the clean test. Note: BES never got below
+no-intervention sycophancy, so the "matched" CAA rows in `llama_bes_vs_caa.csv` and
+`llama_comparisons.csv` fell back to the strongest grid multiplier and are not a matched
+comparison; they are not used in the report.
+
+**Findings.** Protocol reproduced (within 0.002; MMLU within 0.005). BES as specified does not
+reduce sycophancy on Llama-2: no validation setting moved it (0.746–0.762 vs 0.749), and on test
+it goes from 0.695 to 0.711 on their items and 0.782 to 0.725 on PhilPapers. Their layer-13
+vector at α = −1 gives 0.539 (published 0.538); layer 12 gives 0.466 (published 0.465).
+
+**What it led to.** Notebook 08: why does a method that works on Qwen do nothing here?
+
+### 08 — Why BES fails on Llama-2, and general improvements
+
+**Purpose.** Part A diagnoses the Llama-2 failure and tries repairs. Part B tests whether any
+of the improvements suggested by the Qwen results help on Qwen itself.
+
+**How to read it.** §1 is the key diagnostic. Activation patching copies the no-opinion
+prompt's activations into the opinion prompt at one layer, over the question tokens or the last
+token only; that is the ceiling for any eraser at that layer and span. If patching the question
+tokens restores the no-opinion answer, BES targets the right place. §2–3 is a full grid of
+layer × rank × span under a stricter selection rule (a setting must lower sycophancy by 0.03,
+then lowest KL). §4–6 test directions chosen by effect, directions aimed at the user's option,
+and projecting out CAA's own vector. §7 tests the best of each. In Part B every row is compared
+with the original setting (`p_*_vs_fixed`), not just with no intervention.
+
+**Findings.** Patching the question tokens brings sycophancy from 0.763 to 0.632 / 0.562 /
+0.518 / 0.492 at layers 8 / 10 / 12 / 14 (no-opinion 0.478); patching the last token does
+nothing until layer 14. So the target is right. Rank-1 erasure does nothing at any layer, and
+only 7 of 108 grid settings qualify. At layer 12 the top-variance direction has no effect, while
+five lower-variance ones chosen by effect give 0.545–0.564 on test. Label-aimed erasure and
+erasing the CAA vector do not work. Part B: per-item strength, effect selection, label-aimed
+erasure and the chat template do not beat the original on Qwen; the "ignore my opinion" system
+prompt still fails. (§8's table is empty in this run because the notebook-02 CSVs were not in
+Colab's `results/`; `results/qwen_imp_selection_rule.csv` was regenerated from the committed
+notebook-02 tables and shows every Qwen choice unchanged.)
+
+**What it led to.** The effect-selected directions were chosen on validation items from the
+fitting questions, on one seed, and still sat above the patching ceiling (0.571 vs 0.518 on
+validation). Notebook 09 tests them cleanly and tries to close the gap.
+
+### 09 — Closing the gap on Llama-2, with a generality check on Qwen
+
+**Purpose.** Select every setting on questions that neither fitting nor testing uses, and find
+out whether BES on Llama-2 can reach the patching ceiling and a Qwen-like advantage over CAA.
+
+**How to read it.** The 109 PhilPapers questions are split in half: settings are chosen on
+`phil_val` and tested on `phil_test` (no shared questions). §1 gives the reference points:
+CAA, notebook 08's directions, and the patching ceiling. §2 compares estimators needing no
+search across ranks. §3 is greedy effect selection with a stability check (Jaccard overlap of
+helpful directions across validation draws). §4 combines layers. §5 trains a *learned eraser*:
+four orthonormal directions fitted by gradient descent with the model frozen to minimise the
+same KL objective, then applied by the same projection. §6 tests everything, with CAA matched
+on `phil_val`, plus MMLU and the factual control. Part B repeats the estimators on Qwen.
+
+**Findings.** The patching ceiling at layer 12 is 0.430 (oracle 0.427). Notebook 08's
+directions give 0.604 on the clean split, so that result was partly draw-dependent. The real
+problem was rank: sycophancy falls steadily with rank (0.726 / 0.674 / 0.572 / 0.515 at ranks
+2 / 4 / 8 / 16 on validation). On `phil_test`, rank-16 SVD gives 0.524 (KL 0.50) against
+official CAA's 0.504 (0.51), and the learned eraser gives 0.441 (KL 0.395), with KL equal to
+layer-13 CAA at matched sycophancy (0.440, p = 0.55), half of layer-12 CAA's (0.890), and an MMLU
+cost of 0.7 points against 6–8 for matched CAA. The factual control is a trade-off, not a win:
+the learned eraser keeps 0.848 accuracy when the user is right and lifts the user-wrong case
+from 0.046 to 0.248, while matched CAA reaches 0.44–0.47 there but drops to 0.62–0.67 when the
+user is right. On Qwen nothing beats the original: greedy selection picks the original two
+directions, and higher rank hurts.
+
+**What it means.** The projection and the objective transfer across models; the rank-2 SVD
+does not. Rank must be part of the validation search, and the learned eraser is the version of
+BES that works on both models. It is one run on one seed.
+
+## Running the notebooks
+
+Run 02 before 03, and both before 04 and 05; 01 and 06–09 are independent. Every notebook clones
+the repo on Colab, installs requirements, downloads data and mounts Drive; results go to
+`results/` and to `MyDrive/w266_bes_v2/`. On an A100, 01–05 take about 1.5 hours, 06 about 10
+minutes, 07 about 30, 08 about 60 and 09 about 50. Notebooks 06–09 need Hugging Face access to
+`meta-llama/Llama-2-7b-chat-hf`.
+
+## Design decisions that matter for validity
+
+- **Question-grouped splits.** The 30,051 items contain only 158 distinct questions (NLP 32,
+  PhilPapers 109, political 17), each repeated with many biographies. Questions are assigned
+  to fit / validation / test (30 / 20 / 50% within each dataset), so no question is shared
+  across splits, and items are drawn evenly across datasets and questions.
+- **Selection on validation, reporting on test.** Every BES and CAA hyperparameter is chosen on
+  validation questions and recorded in `results/selected_config.json`; test questions are
+  evaluated once per seed.
+- **All answer options are scored.** 27% of PhilPapers items have the user's answer at (C)–(G)
+  and 59% offer more than two options. Probabilities are read over each item's own letters.
+- **Question-clustered uncertainty.** Items sharing a question are not independent, so
+  intervals resample questions (cluster bootstrap). MMLU differences use exact McNemar tests.
+- **CAA at full strength.** Rimsky et al.'s recipe (answer-letter position, raw mean difference,
+  1,000 fit items) with its own layer, multiplier and span search. CAA's configuration is chosen
+  to minimise KL at the sycophancy level BES reaches, the exact point the hypothesis compares.
+  Notebook 06 checks the implementation against the published Llama-2 results.
+- **Readout.** Prompts end in `(` so the next token is the answer letter. Letter token ids are
+  taken in context, which is correct for both byte-level BPE (Qwen) and SentencePiece (Llama).
+  Left padding uses explicit position ids. Raw (non-chat) formatting is the default, matching
+  the benchmark's `Answer:` format. `Config.chat = True` switches to the chat template (used in notebook 08,
+  §12). The model runs in
+  fp32 (Llama-2 in fp16) so small probability differences are not affected by half precision.
+
+## Data
+
+The original data is in `data/` (see `data/README.md` for sources, licences and which notebook uses each file).
+
+| Source | Items | Use |
+|---|---|---|
+| Anthropic model-written evals, sycophancy (Perez et al., 2023) | 30,051 (158 questions) | fit / validation / test |
+| SycophancyEval `answer` (Sharma et al., 2024) | 500 questions (TriviaQA + TruthfulQA) | factual control |
+| SycophancyEval `are_you_sure` | 400 questions | pushback transfer |
+| MMLU (Hendrycks et al., 2021) | 1,000 random test items | capability |
+| Rimsky et al. CAA release | 1,000 + 50, 570 MMLU | implementation benchmark; Llama-2 comparison (06–09) |
+
+## Layout
+
+```
+notebooks/                 notebooks 01–09, executed, with outputs
+src/data.py                opinion/neutral pairs, option letters, question ids
+src/bes.py                 prompt formatting, interventions (BES, CAA, LEACE), activation capture, scoring, metrics
+src/experiment.py          config, question-grouped splits, Runner (fit/evaluate), auxiliary datasets, persistence
+src/stats.py               cluster bootstrap, paired tests, McNemar, AUC, interpolation
+src/plots.py               shared figure style (Okabe–Ito palette)
+tests/test_mechanics.py    14 offline tests (hooks, masks, padding, LEACE, splits, metrics, stats)
+tests/smoke_notebooks.py   runs every notebook on a tiny random model (CPU) to catch code errors
+scripts/download_data.sh   re-downloads the raw data (skips files already in data/raw/)
+data/                      original datasets (Anthropic sycophancy evals, SycophancyEval, Rimsky et al. release)
+results/                   CSVs, figures and selected_config.json from the final runs; preliminary_v0/ holds the first runs
+```
+
+## Local checks (no GPU needed)
+
+```bash
+pip install -r requirements.txt nbclient ipykernel
+bash scripts/download_data.sh && python -m src.data --dataset all
+python -m tests.test_mechanics
+python -m tests.smoke_notebooks        # about 10 minutes on CPU
+```
+
+## Key references
+
+Rimsky et al., ACL 2024 · Perez et al., Findings of ACL 2023 · Sharma et al., ICLR 2024 ·
+Arditi et al., NeurIPS 2024 · Belrose et al., NeurIPS 2023 · Zou et al., 2023 (RepE) ·
+Bolukbasi et al., NeurIPS 2016 · Wang et al., 2025 (arXiv:2508.02087) · Tan et al., NeurIPS 2024.

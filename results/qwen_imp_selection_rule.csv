@@ -1,0 +1,8 @@
+stage,picked_by_kl_only,picked_by_rule,eligible,of,same
+layer,12,12,3,10,True
+rank,2,2,4,4,True
+estimator,svd,svd,1,3,True
+span,question,question,3,4,True
+window,16,16,2,3,True
+band,1,1,4,4,True
+strength,0.75,0.75,4,4,True
