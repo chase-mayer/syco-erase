@@ -81,6 +81,7 @@ what each notebook is for, how to read its output, what it found, and why the ne
 | 08 | `08_bes_llama2_improvements` | Llama-2, then Qwen | as 07; Qwen seed 0 | `llama_imp_*`, `qwen_imp_*`, `fig_llama_diagnostics`, `fig_llama_improved`, `fig_qwen_improved` |
 | 09 | `09_bes_llama2_closing_the_gap` | Llama-2, then Qwen | PhilPapers split by question; Qwen seed 0 | `llama_gap_*`, `qwen_gap_*`, `fig_llama_gap` |
 | 10 | `10_bes_vs_caa_current_models` | Qwen2.5, Qwen3.5, Llama-3.2, Llama-3.1 | seed-0 splits, **test** | `m10_<model>_*`, `m10_summary`, `fig_m10_*` |
+| 10b | `10b_bes_vs_caa_current_models_v2` | as 10, then Qwen3.5-9B, Llama-2 | seed-0 splits, **test** | `m10b_<model>_*`, `m10b_summary`, `m10b_v1_vs_v2`, `fig_m10b_*` |
 
 **Terms used below.** *Sycophancy* (or `syco`, P) is the mean probability the model gives to the
 user's preferred option; lower is better, down to the *oracle* level, which is the same quantity
@@ -308,18 +309,63 @@ against matched CAA, and MMLU drops. `m10_<model>_test` has every condition, inc
 whole rank curve (`kind == "rank curve"`); `fig_m10_<model>` plots it with the matched CAA curve,
 and `fig_m10_rank_curves` puts the models side by side.
 
+**Findings.** At matched validation sycophancy, the learned eraser (k = 4) has lower test KL
+than CAA on Qwen2.5-1.5B (0.094 vs 0.331, p < 0.001) and keeps more MMLU (0.574 vs 0.470). On
+Qwen3.5-2B (k = 16: 0.117 vs 0.174, p = 0.051) and Llama-3.2-3B (0.345 vs 0.469, p = 0.16) the
+direction favours BES without being significant, and BES keeps more MMLU (0.315 vs 0.235; 0.498
+vs 0.231). On Llama-3.1-8B the two tie on KL (0.327 vs 0.314, p = 0.94) and the learned eraser
+loses more MMLU (0.325 vs 0.418); the selected SVD setting keeps more MMLU than its matched CAA
+(0.499 vs 0.461, p = 0.005). Caveats: one seed; rank curves are not monotone; the SVD pick
+(rank 256 on Qwen2.5) and CAA's own-terms pick (α = −32 on some models) sit at the edge of their
+grids; Qwen3.5-2B's baseline MMLU (0.357) is low; the selection rule (lowest sycophancy + KL)
+differs from notebook 02's KL-minimising rule for Qwen.
+
+**What it led to.** Notebook 10b: a second protocol, fixed in advance, that addresses those
+caveats for both methods.
+
+### 10b — Protocol v2: the notebook 10 comparison with a wider, pre-specified search
+
+**Purpose.** A robustness check on notebook 10, not a replacement: notebook 10 stays the
+pre-specified result. Every v2 setting is fixed in the notebook's first settings cell before any
+model is run; choices are made on validation and the test questions are scored once per model.
+
+**What changes (both methods get a wider search).** A prompt-format check before anything is
+fitted (answer-letter mass, and whether batch padding changes the answers, on fitting prompts
+and MMLU items 1000–1199, which are disjoint from the 1,000 evaluation items; a model that fails
+is scored one prompt at a time, or switched format by a fixed rule). BES fits on the same 1,000
+items as CAA (300 in v1); the layer grid adds the ±1 and ±2 neighbours of the best layer; the
+question window is chosen from 8/16/32 tokens; ranks run to 512 plus the cap (a quarter of the
+hidden size); the learned eraser's layer is chosen by a short training run at the three best
+screened layers, and its loss adds a fixed-weight retain term (KL on the no-opinion prompts with
+the eraser applied to every position, from fitting items only). CAA gets every layer BES saw plus
+the ±1 and ±2 neighbours of its own best layer, and multipliers to −64 (10 values). A new test
+metric, KL on the no-opinion prompts with each method applied, measures collateral change where
+there is no opinion to remove. Selection rule, matching, splits, MMLU and the factual control are
+as in notebook 10.
+
+**Part A** reruns notebook 10's four models; **Part B** applies the unchanged protocol to
+Qwen3.5-9B and Llama-2-7B-Chat, which v2 was not designed on. Muse Glimmer 30B is optional and
+off by default (`RUN_MUSE = False`).
+
+**How to read it.** `m10b_summary` has notebook 10's columns plus the v2 choices (`bes_layer`,
+`bes_window`, `learned_layer`, `batch_size`, `format_switched`) and the no-opinion KL for each
+method (`*_kl_neutral`); `m10b_v1_vs_v2` puts the v1 and v2 headline numbers side by side;
+`m10b_<model>_format_check` records the format check.
+
 **Findings.** Not yet run.
 
 ## Running the notebooks
 
-Run 02 before 03, and both before 04 and 05; 01 and 06–10 are independent. Every notebook clones
+Run 02 before 03, and both before 04 and 05; 01 and 06–10 are independent, and 10b reads notebook 10's summary for its v1-vs-v2 table. Every notebook clones
 the repo on Colab, installs requirements, downloads data and mounts Drive; results go to
 `results/` and to `MyDrive/w266_bes_v2/`. On an A100, 01–05 take about 1.5 hours, 06 about 10
 minutes, 07 about 30, 08 about 60 and 09 about 50; 10 takes roughly 15–25 minutes for each Qwen model and
-Llama-3.2-3B and 45 for Llama-3.1-8B (Muse Glimmer, if switched on, several hours). Notebooks
+Llama-3.2-3B and 45 for Llama-3.1-8B (Muse Glimmer, if switched on, several hours); 10b takes
+roughly twice as long per model (about 4–6 hours for Part A and 2–3 for Part B), saving each
+model's results as it finishes, so it can be run across several sessions. Notebooks
 06–09 need Hugging Face access to `meta-llama/Llama-2-7b-chat-hf`, and notebook 10 to
-`meta-llama/Llama-3.2-3B-Instruct` and `meta-llama/Llama-3.1-8B-Instruct` (a model without
-access is skipped with a message).
+`meta-llama/Llama-3.2-3B-Instruct` and `meta-llama/Llama-3.1-8B-Instruct`, and 10b to those
+plus `meta-llama/Llama-2-7b-chat-hf` (a model without access is skipped with a message).
 
 ## Design decisions that matter for validity
 
