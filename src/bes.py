@@ -30,12 +30,18 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 LETTERS = tuple("ABCDEFGHIJKLM")
 
+# Extra keyword arguments for every chat-template call, e.g. {"enable_thinking": False} for
+# Qwen3/3.5 or a fixed {"date_string": ...} for Llama-3. Empty by default (notebooks 01–09).
+CHAT_TEMPLATE_KWARGS: dict = {}
+
 # --------------------------------------------------------------------------------------
 # model, tokenizer, prompt formatting
 # --------------------------------------------------------------------------------------
 
 
-def load(model_name: str, device: str | None = None, dtype: str = "auto"):
+def load(model_name: str, device: str | None = None, dtype: str = "auto", quant: str | None = None):
+    """Load a causal LM (or, for checkpoints with no causal-LM class such as Muse Glimmer, the
+    image-text-to-text model, used text-only). quant="4bit"/"8bit" loads with bitsandbytes."""
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     if dtype == "auto":
         if device == "cuda":
@@ -48,11 +54,31 @@ def load(model_name: str, device: str | None = None, dtype: str = "auto"):
     tok.padding_side = "left"
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
+    kwargs = {}
+    if quant:
+        from transformers import BitsAndBytesConfig
+
+        kwargs["quantization_config"] = (BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch_dtype,
+                                                            bnb_4bit_quant_type="nf4")
+                                         if quant == "4bit" else BitsAndBytesConfig(load_in_8bit=True))
+        kwargs["device_map"] = {"": 0}
+
+    def _from(cls):
+        try:
+            return cls.from_pretrained(model_name, dtype=torch_dtype, **kwargs)
+        except TypeError:
+            return cls.from_pretrained(model_name, torch_dtype=torch_dtype, **kwargs)
+
     try:
-        model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch_dtype)
-    except TypeError:
-        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch_dtype)
-    model = model.to(device)
+        model = _from(AutoModelForCausalLM)
+    except ValueError as exc:
+        if "Unrecognized configuration class" not in str(exc):
+            raise
+        from transformers import AutoModelForImageTextToText
+
+        model = _from(AutoModelForImageTextToText)
+    if not quant:
+        model = model.to(device)
     model.eval()
     return model, tok, device
 
@@ -67,9 +93,15 @@ def option_ids(tok, letters=LETTERS) -> list[int]:
     ids = []
     for letter in letters:
         full = tok.encode("Answer: (" + letter, add_special_tokens=False)
-        assert full[: len(head)] == head and len(full) == len(head) + 1, (
-            f"'(' + {letter!r} does not tokenise as '(' followed by one letter token: {full}")
-        ids.append(full[-1])
+        if full[: len(head)] == head and len(full) == len(head) + 1:
+            ids.append(full[-1])
+            continue
+        # tokenizers that merge '(' with a following letter: score the bare letter token,
+        # which is what follows a prompt that already ends in a '(' token
+        bare = tok.encode(letter, add_special_tokens=False)
+        assert len(bare) == 1, f"{letter!r} is not a single token: {bare}"
+        ids.append(bare[0])
+    assert len(set(ids)) == len(ids), f"answer letters share token ids: {ids}"
     return ids
 
 
@@ -83,7 +115,8 @@ def format_prompt(tok, text: str, chat: bool = False, system: str | None = None)
         body = body[: -len("Answer:")].rstrip()
     msgs = ([{"role": "system", "content": system}] if system else []) + \
            [{"role": "user", "content": body}]
-    out = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True) + "("
+    out = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True,
+                                  **CHAT_TEMPLATE_KWARGS) + "("
     if tok.bos_token and out.startswith(tok.bos_token):
         out = out[len(tok.bos_token):]
     return out
@@ -106,7 +139,8 @@ def common_prefix_len(tok, a: str, b: str) -> int:
 
 
 def layer_module(model, layer: int):
-    for path in ("model.layers", "model.model.layers", "transformer.h"):
+    for path in ("model.layers", "model.model.layers", "model.language_model.layers",
+                 "language_model.model.layers", "transformer.h"):
         obj = model
         try:
             for part in path.split("."):

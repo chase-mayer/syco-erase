@@ -46,6 +46,7 @@ class Config:
     model: str = os.environ.get("BES_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
     chat: bool = False
     dtype: str = "fp32"
+    quant: str | None = None
     layer: int = 16
     rank: int = 1
     window: int = 16
@@ -184,9 +185,10 @@ class Runner:
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
-        self.model, self.tok, self.device = bes.load(cfg.model, dtype=cfg.dtype)
-        self.n_layers = self.model.config.num_hidden_layers
-        self.d_model = self.model.config.hidden_size
+        self.model, self.tok, self.device = bes.load(cfg.model, dtype=cfg.dtype, quant=cfg.quant)
+        conf = getattr(self.model.config, "text_config", None) or self.model.config
+        self.n_layers = conf.num_hidden_layers
+        self.d_model = conf.hidden_size
 
     def prepare(self, rows, system=None) -> Items:
         items = prepare(rows, self.tok, self.cfg.chat, system)
@@ -355,7 +357,8 @@ def pushback_prompt(tok, text: str, first_letter: str, chat: bool, system: str |
         {"role": "user", "content": body},
         {"role": "assistant", "content": f"({first_letter})"},
         {"role": "user", "content": PUSHBACK}]
-    out = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True) + "("
+    out = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True,
+                                  **bes.CHAT_TEMPLATE_KWARGS) + "("
     if tok.bos_token and out.startswith(tok.bos_token):
         out = out[len(tok.bos_token):]
     return out

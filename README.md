@@ -80,6 +80,7 @@ what each notebook is for, how to read its output, what it found, and why the ne
 | 07 | `07_bes_llama2_vs_published_caa` | Llama-2-7B-Chat | Rimsky et al. release + PhilPapers | `llama_*` (no suffix), `fig_llama_frontier` |
 | 08 | `08_bes_llama2_improvements` | Llama-2, then Qwen | as 07; Qwen seed 0 | `llama_imp_*`, `qwen_imp_*`, `fig_llama_diagnostics`, `fig_llama_improved`, `fig_qwen_improved` |
 | 09 | `09_bes_llama2_closing_the_gap` | Llama-2, then Qwen | PhilPapers split by question; Qwen seed 0 | `llama_gap_*`, `qwen_gap_*`, `fig_llama_gap` |
+| 10 | `10_bes_vs_caa_current_models` | Qwen2.5, Qwen3.5, Llama-3.2, Llama-3.1 | seed-0 splits, **test** | `m10_<model>_*`, `m10_summary`, `fig_m10_*` |
 
 **Terms used below.** *Sycophancy* (or `syco`, P) is the mean probability the model gives to the
 user's preferred option; lower is better, down to the *oracle* level, which is the same quantity
@@ -275,15 +276,50 @@ directions, and higher rank hurts.
 
 **What it means.** The projection and the objective transfer across models; the rank-2 SVD
 does not. Rank must be part of the validation search, and the learned eraser is the version of
-BES that works on both models. It is one run on one seed.
+BES that works on Llama-2; it was not run on Qwen here, and Qwen's SVD sweep stopped at rank 8. It is one run on one seed.
+
+**What it led to.** Notebook 10: the full rank sweep and the learned eraser on Qwen, and both methods on current models.
+
+### 10 — BES vs CAA on current Llama and Qwen models, with the full rank sweep
+
+**Purpose.** Two gaps: on Qwen, notebook 09 swept SVD ranks only up to 8 and never trained the
+learned eraser, and every result so far uses 2024-era models. This notebook runs one protocol,
+unchanged, on Qwen2.5-1.5B-Instruct (the original model), Qwen3.5-2B (current Qwen at that
+size), Llama-3.2-3B-Instruct (the newest Llama text model under 8B) and Llama-3.1-8B-Instruct
+(the largest current Llama that fits one GPU, and Llama-2-7B's size). Qwen3.5-9B,
+Llama-2-7B-Chat and Muse Glimmer 30B (Meta's current open model; 4-bit on a 40 GB GPU) are
+optional.
+
+**Protocol (identical for every model).** Seed-0 question-grouped splits: 300 fit items for
+BES, 1,000 for CAA (from the same fit questions), 450 validation, 900 test. BES: every layer in
+the notebook 03 grid at ranks 4/16/64, then ranks 1–256 × strengths 0.5/0.75/1 at the chosen
+layer (plus a ±1-layer band for the best three), then learned erasers with k = 4 and 16. CAA:
+every layer × span × multiplier (−0.5 to −32). Settings are chosen on validation by lowest
+sycophancy + KL among those lowering sycophancy by at least 0.03; CAA is matched on validation
+to each headline BES setting's sycophancy, as in notebook 03. The test questions are scored once
+for every method, with question-cluster bootstrap intervals and paired tests against no
+intervention and against matched CAA, plus MMLU (1,000 items, McNemar) and the factual control.
+Prompts use each model's chat template (thinking off for Qwen3.5), except Qwen2.5, which keeps
+the raw format and fp32 of notebooks 02–05.
+
+**How to read it.** `m10_summary` has one row per model: test sycophancy and KL for the
+selected SVD setting and each learned eraser, the same for CAA matched to it, the KL p-value
+against matched CAA, and MMLU drops. `m10_<model>_test` has every condition, including the
+whole rank curve (`kind == "rank curve"`); `fig_m10_<model>` plots it with the matched CAA curve,
+and `fig_m10_rank_curves` puts the models side by side.
+
+**Findings.** Not yet run.
 
 ## Running the notebooks
 
-Run 02 before 03, and both before 04 and 05; 01 and 06–09 are independent. Every notebook clones
+Run 02 before 03, and both before 04 and 05; 01 and 06–10 are independent. Every notebook clones
 the repo on Colab, installs requirements, downloads data and mounts Drive; results go to
 `results/` and to `MyDrive/w266_bes_v2/`. On an A100, 01–05 take about 1.5 hours, 06 about 10
-minutes, 07 about 30, 08 about 60 and 09 about 50. Notebooks 06–09 need Hugging Face access to
-`meta-llama/Llama-2-7b-chat-hf`.
+minutes, 07 about 30, 08 about 60 and 09 about 50; 10 takes roughly 15–25 minutes for each Qwen model and
+Llama-3.2-3B and 45 for Llama-3.1-8B (Muse Glimmer, if switched on, several hours). Notebooks
+06–09 need Hugging Face access to `meta-llama/Llama-2-7b-chat-hf`, and notebook 10 to
+`meta-llama/Llama-3.2-3B-Instruct` and `meta-llama/Llama-3.1-8B-Instruct` (a model without
+access is skipped with a message).
 
 ## Design decisions that matter for validity
 
@@ -324,7 +360,7 @@ The original data is in `data/` (see `data/README.md` for sources, licences and 
 ## Layout
 
 ```
-notebooks/                 notebooks 01–09, executed, with outputs
+notebooks/                 notebooks 01–09, executed, with outputs; 10, ready to run
 src/data.py                opinion/neutral pairs, option letters, question ids
 src/bes.py                 prompt formatting, interventions (BES, CAA, LEACE), activation capture, scoring, metrics
 src/experiment.py          config, question-grouped splits, Runner (fit/evaluate), auxiliary datasets, persistence
