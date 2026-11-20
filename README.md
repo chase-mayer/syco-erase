@@ -309,50 +309,98 @@ against matched CAA, and MMLU drops. `m10_<model>_test` has every condition, inc
 whole rank curve (`kind == "rank curve"`); `fig_m10_<model>` plots it with the matched CAA curve,
 and `fig_m10_rank_curves` puts the models side by side.
 
-**Findings.** At matched validation sycophancy, the learned eraser (k = 4) has lower test KL
-than CAA on Qwen2.5-1.5B (0.094 vs 0.331, p < 0.001) and keeps more MMLU (0.574 vs 0.470). On
-Qwen3.5-2B (k = 16: 0.117 vs 0.174, p = 0.051) and Llama-3.2-3B (0.345 vs 0.469, p = 0.16) the
-direction favours BES without being significant, and BES keeps more MMLU (0.315 vs 0.235; 0.498
-vs 0.231). On Llama-3.1-8B the two tie on KL (0.327 vs 0.314, p = 0.94) and the learned eraser
-loses more MMLU (0.325 vs 0.418); the selected SVD setting keeps more MMLU than its matched CAA
-(0.499 vs 0.461, p = 0.005). Caveats: one seed; rank curves are not monotone; the SVD pick
-(rank 256 on Qwen2.5) and CAA's own-terms pick (α = −32 on some models) sit at the edge of their
-grids; Qwen3.5-2B's baseline MMLU (0.357) is low; the selection rule (lowest sycophancy + KL)
-differs from notebook 02's KL-minimising rule for Qwen.
+**Findings.** Only the Qwen2.5-1.5B results are valid measurements. Notebook 10b's format
+check showed that in the chat format used here for Qwen3.5-2B, Llama-3.2-3B and Llama-3.1-8B the
+models put almost no next-token probability on the answer letters (under 1%, against 81–100% in
+the raw `Answer: (` format). The prompt ends in a bare `(` token, which these tokenizers merge with
+the letter that follows, so the scored letter tokens are ones the model would not produce there,
+and renormalising over them compares leftover probabilities rather than the model's answers. The
+same check put 98% of the mass on the letters for Qwen2.5 in its raw format, so its row stands:
+the learned eraser (k = 4) has lower test KL than matched CAA (0.094 vs 0.331, p < 0.001) and
+keeps more MMLU (0.574 vs 0.470; no intervention 0.595). For the other three models, use
+notebook 10b, which replaces these runs.
 
 **What it led to.** Notebook 10b: a second protocol, fixed in advance, that addresses those
 caveats for both methods.
 
 ### 10b — Protocol v2: the notebook 10 comparison with a wider, pre-specified search
 
-**Purpose.** A robustness check on notebook 10, not a replacement: notebook 10 stays the
-pre-specified result. Every v2 setting is fixed in the notebook's first settings cell before any
-model is run; choices are made on validation and the test questions are scored once per model.
+**Purpose.** A second protocol, every setting fixed in the notebook's first settings cell before
+any model was run; choices are made on validation and the test questions are scored once per
+model. It was planned as a robustness check on notebook 10; because its format check found that
+notebook 10's chat-format runs did not measure the models' answers (see notebook 10), it is the
+result for the current models, and notebook 10 stands only for Qwen2.5.
 
 **What changes (both methods get a wider search).** A prompt-format check before anything is
 fitted (answer-letter mass, and whether batch padding changes the answers, on fitting prompts
 and MMLU items 1000–1199, which are disjoint from the 1,000 evaluation items; a model that fails
 is scored one prompt at a time, or switched format by a fixed rule). BES fits on the same 1,000
 items as CAA (300 in v1); the layer grid adds the ±1 and ±2 neighbours of the best layer; the
-question window is chosen from 8/16/32 tokens; ranks run to 512 plus the cap (a quarter of the
-hidden size); the learned eraser's layer is chosen by a short training run at the three best
+question window is chosen from 8/16/32 tokens and the edited span from question or all tokens;
+the estimator is chosen from centred SVD, mean difference and LEACE (notebook 02's ablation);
+ranks run to 512 plus the cap (a quarter of the hidden size); the learned eraser's layer is chosen by a short training run at the three best
 screened layers, and its loss adds a fixed-weight retain term (KL on the no-opinion prompts with
 the eraser applied to every position, from fitting items only). CAA gets every layer BES saw plus
 the ±1 and ±2 neighbours of its own best layer, and multipliers to −64 (10 values). A new test
 metric, KL on the no-opinion prompts with each method applied, measures collateral change where
-there is no opinion to remove. Selection rule, matching, splits, MMLU and the factual control are
-as in notebook 10.
+there is no opinion to remove, and notebook 01's novelty check (largest cosine between the BES
+directions and the CAA vector at the same layer) is repeated on every model. Selection rule,
+matching, splits, MMLU and the factual control are as in notebook 10. The training-free pick is
+BES as proposed; the learned eraser is trained with the model frozen and is reported as a
+variant, as in notebook 09.
 
 **Part A** reruns notebook 10's four models; **Part B** applies the unchanged protocol to
-Qwen3.5-9B and Llama-2-7B-Chat, which v2 was not designed on. Muse Glimmer 30B is optional and
+Qwen3.5-9B and Llama-2-7B-Chat, which v2 was not designed on. Llama-2 here uses the Anthropic
+splits of notebooks 02–05 and 10, not Rimsky et al.'s items, so it cross-checks notebooks 07–09
+under a common protocol rather than reproducing their numbers. Muse Glimmer 30B is optional and
 off by default (`RUN_MUSE = False`).
 
 **How to read it.** `m10b_summary` has notebook 10's columns plus the v2 choices (`bes_layer`,
-`bes_window`, `learned_layer`, `batch_size`, `format_switched`) and the no-opinion KL for each
-method (`*_kl_neutral`); `m10b_v1_vs_v2` puts the v1 and v2 headline numbers side by side;
-`m10b_<model>_format_check` records the format check.
+`bes_window`, `bes_span`, `learned_layer`, `batch_size`, `format_switched`, the `cos_*_vs_caa`
+novelty checks) and the no-opinion KL for each method (`*_kl_neutral`); the training-free pick
+keeps the `svd_*` column prefix for comparison with notebook 10, and `svd_desc` names its estimator; `m10b_v1_vs_v2` puts the v1 and v2 headline numbers side by side;
+`m10b_<model>_format_check` records the format check. The executed run is
+`10b_bes_vs_caa_current_models_v2_run.ipynb`.
 
-**Findings.** Not yet run.
+**How it ran.** The five Colab models ran on an A100; Llama-2-7B ran on a local RTX 5080 (16 GB,
+WSL2) after the Colab session ended. The format check switched every chat-format model to the raw
+`Answer: (` format (letter mass 0.81–1.00) and, for Llama-2 on the local card, to one prompt at a
+time, because batch padding moved its answers by a mean of 0.010 against the 0.01 limit. Scoring
+one prompt at a time changes speed only.
+
+**Findings** (test questions; learned erasers against CAA matched to the same validation
+sycophancy; *no-opinion KL* is the change on prompts with no opinion in them):
+
+| Model | Eraser | Syco BES / CAA | KL BES / CAA (p) | No-opinion KL BES / CAA | MMLU BES / CAA (none) |
+|---|---|---|---|---|---|
+| Qwen2.5-1.5B | k = 4 | 0.478 / 0.493 | **0.069** / 0.303 (<0.001) | **0.062** / 0.273 | **0.541** / 0.295 (0.595) |
+|  | k = 16 | 0.474 / 0.484 | **0.085** / 0.368 (<0.001) | **0.078** / 0.339 | **0.534** / 0.260 (0.595) |
+| Qwen3.5-2B | k = 4 | 0.466 / 0.466 | **0.031** / 0.071 (<0.001) | **0.018** / 0.061 | **0.553** / 0.433 (0.600) |
+|  | k = 16 | 0.471 / 0.466 | **0.028** / 0.053 (0.007) | **0.018** / 0.048 | **0.557** / 0.413 (0.600) |
+| Qwen3.5-9B | k = 4 | **0.440** / 0.467 | **0.092** / 0.195 (<0.001) | **0.067** / 0.189 | **0.702** / 0.556 (0.746) |
+|  | k = 16 | **0.438** / 0.464 | **0.093** / 0.197 (<0.001) | **0.076** / 0.193 | **0.682** / 0.512 (0.746) |
+| Llama-3.2-3B | k = 4 | 0.509 / 0.514 | 0.230 / 0.247 (0.48) | **0.011** / 0.261 | **0.601** / 0.482 (0.604) |
+|  | k = 16 | 0.492 / 0.492 | **0.230** / 0.305 (0.002) | **0.013** / 0.280 | **0.599** / 0.367 (0.604) |
+| Llama-3.1-8B | k = 4 | 0.507 / **0.484** | 0.233 / 0.258 (0.44) | **0.133** / 0.299 | 0.554 / 0.520 (0.667) |
+|  | k = 16 | 0.487 / 0.484 | 0.323 / 0.257 (0.22) | 0.304 / 0.300 | 0.246 / **0.518** (0.667) |
+| Llama-2-7B | k = 4 | 0.518 / **0.499** | **0.308** / 0.384 (0.008) | **0.117** / 0.319 | 0.375 / 0.355 (0.469) |
+|  | k = 16 | 0.486 / 0.500 | 0.386 / 0.384 (0.93) | **0.179** / 0.359 | **0.453** / 0.316 (0.469) |
+
+Bold marks a difference with p < 0.05 (paired question-cluster bootstrap; exact McNemar for
+MMLU). On the three Qwen models the learned eraser
+beats CAA on every measure. On the Llama models KL is lower (Llama-3.2, k = 16) or tied, and the
+eraser changes the no-opinion answers far less and keeps more MMLU. Exceptions: on Llama-3.1-8B the k = 16
+eraser loses MMLU (0.246 vs 0.518); with k = 4 on Llama-3.1-8B and Llama-2, CAA lands
+significantly less sycophantic on test (p = 0.017 and 0.009), so those KL comparisons are not at
+equal sycophancy. The training-free pick (centred SVD in every model) ties CAA on KL on four
+models, beats it on Llama-2 (0.411 vs 0.593, p = 0.009, CAA less sycophantic) and loses on
+Llama-3.1-8B (0.378 vs 0.271, p = 0.003); it costs more MMLU than CAA on both Qwen3.5 models and
+less on Llama-3.1-8B. The largest cosine between the BES directions and the CAA vector at the
+same layer is 0.17–0.32 per model. The "ignore my opinion" system prompt does not lower sycophancy on
+Qwen2.5 (0.738 vs 0.703 with no intervention) and lowers it least of all methods elsewhere.
+Caveats: one seed; prompts in the raw format rather than the chat template; the training-free
+pick reaches the rank cap on Qwen2.5 and CAA's own-terms pick sits at α = −64 on the Llama
+models; validation matching does not guarantee equal test sycophancy.
 
 ## Running the notebooks
 

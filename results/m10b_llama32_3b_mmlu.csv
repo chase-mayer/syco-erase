@@ -1,0 +1,9 @@
+model,method,mmlu_acc,p_vs_none,mmlu_acc_matched_caa,p_vs_matched_caa
+llama32_3b,none,0.604,,,
+llama32_3b,BES selected (training-free),0.35,6.058928909022093e-33,0.327,0.28926867046743526
+llama32_3b,CAA matched to BES selected (training-free),0.327,3.214135317524635e-39,,
+llama32_3b,BES learned k4,0.601,0.765991824244793,0.482,9.080092500172517e-12
+llama32_3b,CAA matched to BES learned k4,0.482,8.008436014944685e-13,,
+llama32_3b,BES learned k16,0.599,0.6146550157654618,0.367,1.9750944553856468e-29
+llama32_3b,CAA matched to BES learned k16,0.367,2.7609418132539877e-34,,
+llama32_3b,CAA best on its own terms,0.474,8.135221245250625e-15,,

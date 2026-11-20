@@ -1,0 +1,4 @@
+model,bes,target_val_syco,caa_layer,caa_span,caa_alpha,reached
+qwen35_2b,BES selected (training-free),0.48466020822525024,13,question,-1.7508968627613082,True
+qwen35_2b,BES learned k4,0.4685891270637512,13,last,-4.831043778746231,True
+qwen35_2b,BES learned k16,0.4709521532058716,13,question,-3.2260512742244867,True

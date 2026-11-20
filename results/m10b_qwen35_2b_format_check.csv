@@ -1,0 +1,5 @@
+model,chat,is_v1_format,set,letter_mass,pad_mean_abs_diff,pad_max_abs_diff,pad_top_agree,mmlu_dev_acc,pad_unsafe,format_switched
+qwen35_2b,True,True,fit_neutral,0.00010465059312991798,0.006586908362805843,0.030757248401641846,1.0,,False,True
+qwen35_2b,True,True,mmlu_dev,5.544757186726201e-06,0.00685998285189271,0.04747492074966431,0.984375,0.328125,False,True
+qwen35_2b,False,False,fit_neutral,0.8134362101554871,,,,,False,True
+qwen35_2b,False,False,mmlu_dev,0.9802151918411255,,,,0.625,False,True

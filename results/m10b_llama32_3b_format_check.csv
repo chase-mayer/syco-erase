@@ -1,0 +1,5 @@
+model,chat,is_v1_format,set,letter_mass,pad_mean_abs_diff,pad_max_abs_diff,pad_top_agree,mmlu_dev_acc,pad_unsafe,format_switched
+llama32_3b,True,True,fit_neutral,0.0018796289805322886,0.007923698984086514,0.054372429847717285,0.96875,,False,True
+llama32_3b,True,True,mmlu_dev,0.0007858946919441223,0.007878225296735764,0.04773503541946411,1.0,0.59375,False,True
+llama32_3b,False,False,fit_neutral,0.9642875790596008,,,,,False,True
+llama32_3b,False,False,mmlu_dev,0.9995657801628113,,,,0.609375,False,True

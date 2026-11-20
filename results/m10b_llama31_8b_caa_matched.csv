@@ -1,0 +1,4 @@
+model,bes,target_val_syco,caa_layer,caa_span,caa_alpha,reached
+llama31_8b,BES selected (training-free),0.5559885501861572,17,last,-29.715395842846434,True
+llama31_8b,BES learned k4,0.49896737933158875,11,question,-1.904933170792527,True
+llama31_8b,BES learned k16,0.49992167949676514,11,question,-1.8924178153374371,True

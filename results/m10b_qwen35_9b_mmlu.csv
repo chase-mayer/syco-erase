@@ -1,0 +1,9 @@
+model,method,mmlu_acc,p_vs_none,mmlu_acc_matched_caa,p_vs_matched_caa
+qwen35_9b,none,0.746,,,
+qwen35_9b,BES selected (training-free),0.538,1.0098733511899805e-29,0.618,1.890644231435628e-05
+qwen35_9b,CAA matched to BES selected (training-free),0.618,5.76928491158237e-17,,
+qwen35_9b,BES learned k4,0.702,0.0004897931192734406,0.556,1.6589583280906822e-15
+qwen35_9b,CAA matched to BES learned k4,0.556,3.910940556470392e-29,,
+qwen35_9b,BES learned k16,0.682,1.3760656678393871e-06,0.512,5.04861439907912e-18
+qwen35_9b,CAA matched to BES learned k16,0.512,3.371558628324198e-39,,
+qwen35_9b,CAA best on its own terms,0.58,2.2814390127422826e-24,,

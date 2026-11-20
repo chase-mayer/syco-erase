@@ -1,0 +1,9 @@
+model,method,mmlu_acc,p_vs_none,mmlu_acc_matched_caa,p_vs_matched_caa
+llama32_3b,none,0.575,,,
+llama32_3b,BES selected (SVD),0.354,2.6902084846950746e-36,0.229,3.7751364249045867e-08
+llama32_3b,CAA matched to BES selected (SVD),0.229,1.2622435814827854e-51,,
+llama32_3b,BES learned k4,0.498,3.38984400765667e-10,0.231,7.499760187777971e-30
+llama32_3b,CAA matched to BES learned k4,0.231,3.1478296998978984e-49,,
+llama32_3b,BES learned k16,0.412,6.353508958154563e-25,0.39,0.3296141590175081
+llama32_3b,CAA matched to BES learned k16,0.39,6.265627774035608e-22,,
+llama32_3b,CAA best on its own terms,0.466,2.442621665374383e-11,,
